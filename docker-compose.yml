@@ -1,9 +1,9 @@
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: animal-app-backend
+      context: .
+      dockerfile: backend/Dockerfile
+    image: animal-app-backend:${APP_VERSION:-latest}
     container_name: animal-backend
     restart: unless-stopped
     working_dir: /var/www/html
@@ -15,6 +15,7 @@ services:
       APP_URL: "http://localhost:8000"
       APP_LOCALE: "${APP_LOCALE:-zh_CN}"
       APP_FALLBACK_LOCALE: "${APP_FALLBACK_LOCALE:-zh_CN}"
+      APP_VERSION: "${APP_VERSION:-dev}"
       SANCTUM_STATEFUL_DOMAINS: "${SANCTUM_STATEFUL_DOMAINS:-localhost:3001,localhost,127.0.0.1:3001,127.0.0.1}"
       DB_CONNECTION: mysql
       DB_HOST: db
@@ -35,9 +36,9 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    image: animal-app-frontend
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: animal-app-frontend:${APP_VERSION:-latest}
     container_name: animal-frontend
     restart: unless-stopped
     ports:

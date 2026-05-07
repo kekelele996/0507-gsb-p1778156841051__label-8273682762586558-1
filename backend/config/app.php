@@ -118,6 +118,8 @@ return [
     |
     */
 
+    'version' => env('APP_VERSION', trim(file_get_contents(file_exists(base_path('VERSION')) ? base_path('VERSION') : base_path('../VERSION')))),
+
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
