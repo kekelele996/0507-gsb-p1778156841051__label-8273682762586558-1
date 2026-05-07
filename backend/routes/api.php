@@ -6,6 +6,10 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AnimalController;
 use App\Http\Controllers\MessageController;
 
+use App\Http\Controllers\VersionController;
+
+Route::get('/version', VersionController::class);
+
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
