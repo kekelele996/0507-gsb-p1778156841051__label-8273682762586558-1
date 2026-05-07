@@ -1,0 +1,301 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - '**'
+
+env:
+  BACKEND_IMAGE: animal-app-backend
+  FRONTEND_IMAGE: animal-app-frontend
+
+jobs:
+  check-version:
+    name: 版本一致性检查
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract-version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 提取版本号
+        id: extract-version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "检测到版本: $VERSION"
+
+      - name: 验证三方版本号一致
+        run: |
+          VERSION=${{ steps.extract-version.outputs.version }}
+          ROOT_VERSION=$(node -p "require('./version.json').version")
+          FRONTEND_VERSION=$(node -p "require('./frontend/package.json').version")
+          
+          echo "=== 版本号一致性检查 ==="
+          echo "Git 标签版本: v$VERSION"
+          echo "根目录 version.json: $ROOT_VERSION"
+          echo "前端 package.json: $FRONTEND_VERSION"
+          echo ""
+          
+          ALL_MATCH=true
+          
+          if [ "$ROOT_VERSION" != "$VERSION" ]; then
+            echo "❌ 错误: version.json 与 Git 标签不一致!"
+            echo "   Git 标签: v$VERSION"
+            echo "   version.json: $ROOT_VERSION"
+            ALL_MATCH=false
+          else
+            echo "✅ version.json 与 Git 标签一致"
+          fi
+          
+          if [ "$FRONTEND_VERSION" != "$VERSION" ]; then
+            echo "❌ 错误: 前端 package.json 与 Git 标签不一致!"
+            echo "   Git 标签: v$VERSION"
+            echo "   frontend/package.json: $FRONTEND_VERSION"
+            ALL_MATCH=false
+          else
+            echo "✅ 前端 package.json 与 Git 标签一致"
+          fi
+          
+          echo ""
+          
+          if [ "$ALL_MATCH" != "true" ]; then
+            echo ""
+            echo "❌ 版本号一致性检查失败!"
+            echo "请确保以下三处版本号完全一致:"
+            echo "  1. Git 标签 (v$VERSION)"
+            echo "  2. 根目录 version.json"
+            echo "  3. frontend/package.json 的 version 字段"
+            exit 1
+          fi
+          
+          echo "✅ 所有版本号检查通过!"
+
+  backend-checks:
+    name: 后端代码规范检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 安装 PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          extensions: mbstring, exif, pcntl, bcmath, gd, zip
+
+      - name: 缓存 Composer 依赖
+        uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: 安装后端依赖
+        run: cd backend && composer install --no-progress --prefer-dist
+
+      - name: 代码规范检查 (Laravel Pint)
+        run: cd backend && ./vendor/bin/pint --test
+
+  backend-tests:
+    name: 后端单元测试
+    runs-on: ubuntu-latest
+    needs: backend-checks
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 安装 PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          extensions: pdo_mysql, mbstring, exif, pcntl, bcmath, gd, zip
+
+      - name: 缓存 Composer 依赖
+        uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: 安装后端依赖
+        run: cd backend && composer install --no-progress --prefer-dist
+
+      - name: 配置环境变量
+        run: |
+          cd backend
+          cp .env.example .env
+          php artisan key:generate
+          sed -i 's/DB_CONNECTION=sqlite/DB_CONNECTION=mysql/' .env
+          sed -i 's/DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/' .env
+          sed -i 's/DB_PORT=3306/DB_PORT=3306/' .env
+          sed -i 's/DB_DATABASE=laravel/DB_DATABASE=testing/' .env
+          sed -i 's/DB_USERNAME=root/DB_USERNAME=root/' .env
+          sed -i 's/DB_PASSWORD=/DB_PASSWORD=root/' .env
+
+      - name: 运行迁移
+        run: cd backend && php artisan migrate --force
+
+      - name: 运行单元测试
+        run: cd backend && composer test
+
+  frontend-checks:
+    name: 前端代码规范检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装前端依赖
+        run: cd frontend && npm install
+
+      - name: 代码规范检查 (ESLint)
+        run: cd frontend && npm run lint
+
+  frontend-build:
+    name: 前端构建验证
+    runs-on: ubuntu-latest
+    needs: frontend-checks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装前端依赖
+        run: cd frontend && npm install
+
+      - name: 构建前端
+        run: cd frontend && npm run build
+
+  build-backend-image:
+    name: 构建后端 Docker 镜像
+    runs-on: ubuntu-latest
+    needs: [backend-tests]
+    if: always() && needs.backend-tests.result == 'success'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建后端镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          tags: ${{ env.BACKEND_IMAGE }}:latest
+          push: false
+          load: true
+
+      - name: 验证镜像
+        run: |
+          docker images
+          echo "后端镜像构建成功!"
+
+  build-frontend-image:
+    name: 构建前端 Docker 镜像
+    runs-on: ubuntu-latest
+    needs: [frontend-build]
+    if: always() && needs.frontend-build.result == 'success'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建前端镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          tags: ${{ env.FRONTEND_IMAGE }}:latest
+          push: false
+          load: true
+
+      - name: 验证镜像
+        run: |
+          docker images
+          echo "前端镜像构建成功!"
+
+  summary:
+    name: 流程总结
+    runs-on: ubuntu-latest
+    needs: 
+      - backend-checks
+      - backend-tests
+      - frontend-checks
+      - frontend-build
+      - build-backend-image
+      - build-frontend-image
+      - check-version
+    if: always()
+    steps:
+      - name: 输出执行结果
+        run: |
+          echo "=== CI/CD 流程执行完成 ==="
+          echo ""
+          echo "后端检查结果: ${{ needs.backend-checks.result }}"
+          echo "后端测试结果: ${{ needs.backend-tests.result }}"
+          echo "前端检查结果: ${{ needs.frontend-checks.result }}"
+          echo "前端构建结果: ${{ needs.frontend-build.result }}"
+          echo "后端镜像构建: ${{ needs.build-backend-image.result }}"
+          echo "前端镜像构建: ${{ needs.build-frontend-image.result }}"
+          
+          if [ "${{ needs.check-version.result }}" != "skipped" ]; then
+            echo "版本检查结果: ${{ needs.check-version.result }}"
+          fi
+          
+          echo ""
+          
+          if [ "${{ needs.backend-checks.result }}" == "success" ] && \
+             [ "${{ needs.backend-tests.result }}" == "success" ] && \
+             [ "${{ needs.frontend-checks.result }}" == "success" ] && \
+             [ "${{ needs.frontend-build.result }}" == "success" ] && \
+             [ "${{ needs.build-backend-image.result }}" == "success" ] && \
+             [ "${{ needs.build-frontend-image.result }}" == "success" ]; then
+            echo "✅ 所有检查通过，可以发布!"
+          else
+            echo "❌ 部分检查失败，请查看详细日志!"
+            exit 1
+          fi
