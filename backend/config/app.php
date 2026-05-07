@@ -4,6 +4,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Version
+    |--------------------------------------------------------------------------
+    |
+    | This value is the version of your application, loaded from the root
+    | version.json file to ensure consistency across frontend and backend.
+    |
+    */
+
+    'version' => function_exists('base_path') && file_exists(base_path('../version.json'))
+        ? (json_decode(file_get_contents(base_path('../version.json')), true)['version'] ?? '0.0.0')
+        : '0.0.0',
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Name
     |--------------------------------------------------------------------------
     |
