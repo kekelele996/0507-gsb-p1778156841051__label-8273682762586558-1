@@ -1,0 +1,74 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: animal-app-backend
+    container_name: animal-backend
+    restart: unless-stopped
+    working_dir: /var/www/html
+    environment:
+      APP_NAME: "${APP_NAME:-Laravel}"
+      APP_ENV: "${APP_ENV:-local}"
+      APP_KEY: "${APP_KEY:-}"
+      APP_DEBUG: "${APP_DEBUG:-true}"
+      APP_URL: "http://localhost:8000"
+      APP_LOCALE: "${APP_LOCALE:-zh_CN}"
+      APP_FALLBACK_LOCALE: "${APP_FALLBACK_LOCALE:-zh_CN}"
+      SANCTUM_STATEFUL_DOMAINS: "${SANCTUM_STATEFUL_DOMAINS:-localhost:3001,localhost,127.0.0.1:3001,127.0.0.1}"
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: "${DB_DATABASE:-animal_db}"
+      DB_USERNAME: "${DB_USERNAME:-root}"
+      DB_PASSWORD: "${DB_PASSWORD:-root}"
+    volumes:
+      - ./backend:/var/www/html
+      - /var/www/html/vendor
+    networks:
+      - app-network
+    ports:
+      - "8000:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: animal-app-frontend
+    container_name: animal-frontend
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+  db:
+    image: mysql:8.0
+    container_name: animal-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_PASSWORD:-root}"
+      MYSQL_DATABASE: "${DB_DATABASE:-animal_db}"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - app-network
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${DB_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  db_data:

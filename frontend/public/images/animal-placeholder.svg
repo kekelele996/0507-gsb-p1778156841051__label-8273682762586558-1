@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" fill="none">
+  <rect width="1200" height="900" fill="#E6F4EA"/>
+  <rect x="110" y="120" width="980" height="660" rx="44" fill="#D1FADF"/>
+  <circle cx="430" cy="430" r="130" fill="#34A853" fill-opacity="0.2"/>
+  <circle cx="770" cy="430" r="130" fill="#10B981" fill-opacity="0.2"/>
+  <path d="M375 585C421.392 511.393 485.866 474.594 569.423 474.594C652.98 474.594 718.451 511.393 765.838 585" stroke="#2F855A" stroke-width="34" stroke-linecap="round"/>
+  <path d="M470 338C470 293.817 505.817 258 550 258H588C632.183 258 668 293.817 668 338V376H470V338Z" fill="#2F855A" fill-opacity="0.28"/>
+  <text x="600" y="712" text-anchor="middle" fill="#276749" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="54" font-weight="700">图片加载失败</text>
+  <text x="600" y="772" text-anchor="middle" fill="#2F855A" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="34">已显示默认占位图</text>
+</svg>
